@@ -15,6 +15,7 @@ import pickle
 from PIL import Image
 from torchvision import transforms
 import copy
+from scipy.spatial.transform import Rotation as R
 
 class PathVelocityClass():
     def __init__(self, goal_list, query_list, vel_vec):
@@ -23,7 +24,7 @@ class PathVelocityClass():
         self.vel_vec = vel_vec
 
 class ImagePathLoader():
-    def __init__(self, from_harddive, without_scaling_factors = True):
+    def __init__(self, from_harddive, without_scaling_factors = False, blender_path=True, corrupted_check=False):
         self.from_harddive = from_harddive
         self.length_stored_vec = 8
         self.length_train_vec = 8
@@ -36,6 +37,12 @@ class ImagePathLoader():
         self.rmax = 1
         self.data_path = None
         self.transform = None
+        if blender_path:
+            self.dset_path = 'dataset_blender'
+        else:
+            self.dset_path = f'h_{self.h_cone}_theta_{self.theta_cone}_rmax_{self.rmax}'
+        self.corrupted_check = corrupted_check
+
 
     def calc_and_store_velocities(self):
         if self.from_harddive:
@@ -115,15 +122,52 @@ class ImagePathLoader():
             rospy.logerr("\033[91m" + f"Error verifying image {file_path}: {e}" + "\033[0m")
             return True
 
-    def store_or_load_paths(self, test_stop_id=100, test_stop=False, one_direction=False):
+    def get_camera_groundtruth(self):
+        parent_path = Path(os.path.dirname(os.path.abspath(__file__))).parent.absolute()
+        groundtruth_path = os.path.join(parent_path, "visual_servoing/groundtruth")
+        return groundtruth_path
+
+    def get_base_to_optical(self, splitted_lines):
+        bo = splitted_lines.split(',')
+        base_to_opt = [np.array([bo[0], bo[1], bo[2]], dtype=np.float32),
+                        np.array([bo[6], bo[3], bo[4], bo[5]], dtype=np.float32)]
+        return base_to_opt
+
+    def get_transform_matrix(self):
+        groundtruth_path = self.get_camera_groundtruth()
+        groundtruth_file = 'groundtruth.txt'
+        file_path = os.path.join(groundtruth_path, groundtruth_file)
+        with open(file_path) as file:
+            lines = file.read()
+        base_to_opt = self.get_base_to_optical(lines)
+        rot = R.from_quat(base_to_opt[1]).as_matrix()
+        M_origin_to_camera = np.concatenate([rot, np.array([base_to_opt[0]]).T], axis=1)
+        M_origin_to_camera = np.concatenate([M_origin_to_camera, np.array([[0, 0, 0, 1]])], axis=0)
+        return M_origin_to_camera
+
+    def transform_pose(self, pose):
+        transformation_matrix_base_to_camera = self.get_transform_matrix()
+        return np.dot(pose, transformation_matrix_base_to_camera)
+
+    def get_hom_mat_opt(self, pose_array):
+        location = pose_array[:3]
+        rotation_matrix = R.from_quat(pose_array[3:]).as_matrix()
+        hom_mat = np.eye(4)
+        hom_mat[:3, 3] = location
+        hom_mat[:3, :3] = rotation_matrix
+        hom_mat_opt = self.transform_pose(hom_mat)
+        return hom_mat_opt
+
+    def store_or_load_paths(self, test_stop_id=200, test_stop=False, one_direction=False):
         all_parameter_scenes_paths = self.get_dataset_paths()
         for parameter_scenes_paths in all_parameter_scenes_paths:
-            num_trajectories = len(os.listdir(parameter_scenes_paths))
-            if test_stop:
-                num_trajectories = test_stop_id
-            for i in range(num_trajectories):
+            traj_scenes = os.listdir(parameter_scenes_paths)
+            # num_trajectories = len(os.listdir(parameter_scenes_paths))
+            for i, curr_scene in enumerate(traj_scenes, 1):
+                if test_stop and i==test_stop_id+1:
+                    break
                 corrupt_list = np.zeros((0, 1), dtype=int)
-                scene_path = os.path.join(parameter_scenes_paths, f'scene_{i+1}')
+                scene_path = os.path.join(parameter_scenes_paths, curr_scene)
                 stored_rgb_paths = os.path.join(scene_path, self.rgb_file_names)
                 stored_target_paths = os.path.join(scene_path, self.target_file_names)
                 
@@ -133,7 +177,7 @@ class ImagePathLoader():
                 rgb_path = os.path.join(scene_path, 'rgb')
                 for path in os.listdir(rgb_path):
                     rgb_file_path = os.path.join(rgb_path, path)
-                    if self.is_image_corrupted(rgb_file_path):
+                    if self.corrupted_check and self.is_image_corrupted(rgb_file_path):
                         corrupt_list = np.vstack([corrupt_list, int(path.split('.')[0])])
                     else:
                         query_list.append(rgb_file_path)
@@ -158,12 +202,13 @@ class ImagePathLoader():
             local_servoing_path = os.path.join(os.getcwd(), 'src/visual_servoing')
             self.groundtruth_path = os.path.join(local_servoing_path, 'groundtruth')
             scenes_path = os.path.join(servoing_path, 'scenes')
-            geometry_path = os.path.join(scenes_path, f'h_{self.h_cone}_theta_{self.theta_cone}_rmax_{self.rmax}')
+            geometry_path = os.path.join(scenes_path, self.dset_path)
             parameter_scenes_paths = [os.path.join(geometry_path, entry) for entry in os.listdir(geometry_path)]
+            print(f"{parameter_scenes_paths=}")
             self.data_path = parameter_scenes_paths
         return parameter_scenes_paths
 
-    def load_paths_and_velocities_for_training(self, perc_train_traj, without_scaling_factors = True, test_stop_id=100, test_stop=False, one_direction=False):
+    def load_paths_and_velocities_for_training(self, perc_train_traj, without_scaling_factors = True, test_stop_id=200, test_stop=False, one_direction=False, random_samples=False):
         train_query_list = []
         train_target_list = []
         train_vel_list = []
@@ -175,10 +220,18 @@ class ImagePathLoader():
         all_parameter_scenes_paths = self.get_dataset_paths()
         for parameter_scenes_paths in all_parameter_scenes_paths:
             num_all_traj = len(os.listdir(parameter_scenes_paths))
-            if test_stop:
+            if test_stop and not random_samples:
                 num_all_traj = test_stop_id
+                i_range = range(num_all_traj)
+            elif test_stop and random_samples:
+                np.random.seed(0)
+                num_all_traj = 2 * test_stop_id
+                i_range = np.zeros((0,), dtype=int)
+                for i in range(int(num_all_traj/20)):
+                    i_range = np.hstack([i_range, np.random.choice(np.arange(i*20+1, (i+1)*20+1), size=10, replace=False)])
+                i_range = np.sort(i_range)
             num_train_traj = int(num_all_traj * perc_train_traj / 100)
-            for i in range(num_all_traj):
+            for i in i_range:
                 scene_path = os.path.join(parameter_scenes_paths, f'scene_{i+1}')
                 if i <= num_train_traj:
                     train_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
@@ -212,23 +265,34 @@ class ImagePathLoader():
         return train_storer, test_storer
 
 
-    def get_velocity(self, path, idx, reversed=False, save_array=False, corrupt_list=None):
+    def get_velocity(self, path, idx, reversed=False, save_array=False, corrupt_list=None, from_array=False):
         splitted_lines = None
         poses_path = path
-        file_path = os.path.join(poses_path, 'poses_groundtruth_time.txt')
-        with open(file_path) as file:
-                lines = file.read()
-                splitted_lines = lines.split('\n')
-        target_pose = self.get_splitted_target_pose(suffix='target', idx=idx, poses_bool=True)
         velocity_array = np.empty((0,self.length_stored_vec))
-        for i, line in enumerate(splitted_lines, 1):
-            if line.strip():
-                if not np.isin(i, corrupt_list):
-                    current_pose = np.fromstring(line, dtype=np.float32, sep=',')[1:]
-                    velocity_and_scale = self.calculate_pose_error(current_pose, target_pose)
-                    velocity_array = np.vstack([velocity_array, velocity_and_scale])
-        velocity_and_scale = self.calculate_pose_error(target_pose, target_pose)
-        velocity_array = np.vstack([velocity_array, velocity_and_scale])
+        if 'blender' in self.dset_path:
+            file_path = os.path.join(poses_path, 'poses_groundtruth_time.npy')
+            poses_array = np.load(file_path)
+            target_pose = poses_array[0].reshape((4, 4))
+            for current_line in poses_array:
+                current_pose = current_line.reshape((4, 4))
+                velocity_and_scale = self.calculate_pose_error_mat(current_pose, target_pose)
+                velocity_array = np.vstack([velocity_array, velocity_and_scale])
+        else:
+            file_path = os.path.join(poses_path, 'poses_groundtruth_time.txt')
+            with open(file_path) as file:
+                    lines = file.read()
+                    splitted_lines = lines.split('\n')
+            target_pose = self.get_splitted_target_pose(suffix='target', idx=idx, poses_bool=True)
+            for i, line in enumerate(splitted_lines, 1):
+                if line.strip():
+                    if not np.isin(i, corrupt_list):
+                        current_pose = np.fromstring(line, dtype=np.float32, sep=',')[1:]
+                        # velocity_and_scale = self.calculate_pose_error(current_pose, target_pose)
+                        velocity_and_scale = self.calculate_pose_error_mat(current_pose, target_pose)
+                        velocity_array = np.vstack([velocity_array, velocity_and_scale])
+            # velocity_and_scale = self.calculate_pose_error(target_pose, target_pose)
+            velocity_and_scale = self.calculate_pose_error_mat(target_pose, target_pose)
+            velocity_array = np.vstack([velocity_array, velocity_and_scale])
         if save_array:
             velocity_path = os.path.join(poses_path,'velocities_and_scale.npy')
             np.save(velocity_path, velocity_array)
@@ -286,9 +350,37 @@ class ImagePathLoader():
         pose_error_array = np.hstack([pos_error, trans_scale, rot_error_euler, ori_scale])
 
         return pose_error_array
+    
+    def calculate_pose_error_mat(self, current_pose, target_pose):
+        # Convert current and target poses to numpy arrays for easier manipulation
+        if current_pose.shape[0]*current_pose.shape[1]==16:
+            current_htf = current_pose
+            target_htf = target_pose
+        else:
+            current_htf = self.get_hom_mat_opt(current_pose)
+            target_htf = self.get_hom_mat_opt(target_pose)
+        t_oc_ot = np.dot(np.linalg.inv(current_htf), target_htf)
+
+        # Compute the position error as the translation shift
+        pos_error = t_oc_ot[:3, 3]
+        pos_error_thresh = 0.15
+        trans_scale = np.linalg.norm(pos_error)/pos_error_thresh
+        if trans_scale > 1:
+            trans_scale = 1
+
+        # Compute the orientation error out of Rotation matrix
+        rot_error_euler = tr.euler_from_matrix(t_oc_ot[:3, :3])
+        rot_error_thresh = 7
+        ori_scale = 180/np.pi*np.linalg.norm(rot_error_euler)/rot_error_thresh
+        if ori_scale > 1:
+            ori_scale = 1
+        # pose_error_array = np.hstack((pos_error, rot_error_quat, scale))
+        pose_error_array = np.hstack([pos_error, trans_scale, rot_error_euler, ori_scale])
+
+        return pose_error_array
 
 if __name__ == '__main__':
-    image_shuffeler= ImagePathLoader(True)
+    image_shuffeler= ImagePathLoader(True, corrupted_check=False)
     # image_shuffeler.shuffle_paths()
     # image_shuffeler.calc_and_store_velocities()
-    image_shuffeler.store_or_load_paths(test_stop=True)
+    image_shuffeler.store_or_load_paths(test_stop=False)
