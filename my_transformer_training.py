@@ -48,10 +48,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a neural network')
     init_parser = initial_parser(parser)
     
-    num_traj = 600
-    num_train_traj = 550
-    start_case = 1
-    num_test_cases = 9
+    given_test_cases = [1, 4, 7, 8, 9]
     it_per_epoch = 10000
 
     output_features = [8]
@@ -72,7 +69,7 @@ if __name__ == '__main__':
                              help_str='Choose if rgb images have to be blurred')
     parser.add_argument('--random_blur', type=bool, default=False, help='Choose if random images get blurred')
 
-    for test_case in range(start_case, start_case + num_test_cases):
+    for test_case in given_test_cases:
         if test_case == 1:
             output_features = [3,1,3,1]
             use_loc_tok = True
