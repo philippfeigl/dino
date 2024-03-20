@@ -25,7 +25,7 @@ def initial_parser(parser):
     parser.add_argument('--use_seed', type=bool, default=True, help='Choose if seed value is used for repeatability')
     parser.add_argument('--seed', type=int, default=9757937385320587333, help='Seed value')
     parser.add_argument('--weight_decay', type=np.float32, default=1e-6, help='Weight decay for L2 regularization during training. Used for optimizer') # default_value is 1e-2
-    parser.add_argument('--drop_out', type=float, default=0.5, help='Dropout rate')
+    parser.add_argument('--drop_out', type=float, default=0.2, help='Dropout rate')
     parser.add_argument('--store_on_drive', type=bool, default=True, help='If True, store model and loss on HDD or SSD')
     parser.add_argument('--random_sample', type=bool, default=False, help='If True, use random samples')
     parser.add_argument('--blender_data', type=bool, default=True, help='If True, use blender dataset')
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a neural network')
     init_parser = initial_parser(parser)
     
-    given_test_cases = [2,3,5,6]
+    given_test_cases = [1,4,7,8,9]
     it_per_epoch = 15000
 
     output_features = [8]

@@ -7,6 +7,7 @@ sys.path.append('/home/philipp/catkin_ws/src')
 import cv2
 from pathlib import Path
 import os
+import os.path as osp
 from typing import Tuple, List
 import random
 import tf.transformations as tr
@@ -237,24 +238,21 @@ class ImagePathLoader():
                     break
                 scene_path = os.path.join(parameter_scenes_paths, curr_scene)
                 if i <= num_train_traj:
-                    train_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
-                    train_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
+                    train_target_entries = [osp.join(self.harddrive_path, target_item) for target_item in self.read_list_from_pickle(osp.join(scene_path, self.target_file_names))]
+                    train_target_list.extend(train_target_entries)
+                    train_query_entries = [osp.join(self.harddrive_path, query_item) for query_item in self.read_list_from_pickle(osp.join(scene_path, self.rgb_file_names))]
+                    train_query_list.extend(train_query_entries)
                     train_vel_array = np.vstack([train_vel_array, self.get_velocities_as_array(scene_path,
                                                                                             from_np_file=True, 
                                                                                             without_scaling_factors=without_scaling_factors)])
                     # train_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
                 else:
-                    test_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
-                    test_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
+                    test_target_entries = [osp.join(self.harddrive_path, target_item) for target_item in self.read_list_from_pickle(osp.join(scene_path, self.target_file_names))]
+                    test_target_list.extend(test_target_entries)
+                    test_query_entries = [osp.join(self.harddrive_path, query_item) for query_item in self.read_list_from_pickle(osp.join(scene_path, self.rgb_file_names))]
+                    test_query_list.extend(test_query_entries)
                     test_vel_array = np.vstack([test_vel_array, self.get_velocities_as_array(scene_path,
                                                                                             from_np_file=True, 
-                                                                                            without_scaling_factors=without_scaling_factors)])
-                    # test_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
-                if (num_all_traj == num_train_traj) & (i % 10 == 0):
-                    test_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
-                    test_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
-                    test_vel_array = np.vstack([test_vel_array, self.get_velocities_as_array(scene_path,
-                                                                                            from_np_file=True,
                                                                                             without_scaling_factors=without_scaling_factors)])
                     # test_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
             """
