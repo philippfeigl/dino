@@ -718,7 +718,7 @@ class IBVSTransformerTraining():
 
         train_storer, test_storer = image_path_loader.load_paths_and_velocities_for_training(args.perc_train_traj,
                                                                                              without_scaling_factors=without_scale,
-                                                                                             test_stop=True,
+                                                                                             test_stop=False,
                                                                                              random_samples=args.random_sample)
         """
         test_iterations = 40
@@ -764,10 +764,9 @@ class IBVSTransformerTraining():
         self.learn_vec_len = train_dataset.learn_vec_len
 
         total_data = len(train_dataset)
-        all_iterations_per_epoch = total_data // self.BATCH_SIZE + (total_data % self.BATCH_SIZE != 0)
-        print(f"{all_iterations_per_epoch=}")
-        
-        it_per_epoch = int(all_iterations_per_epoch * args.perc_train_traj/100)
+        it_per_epoch = total_data // self.BATCH_SIZE + (total_data % self.BATCH_SIZE != 0)
+        if args.use_given_its:
+            it_per_epoch = it
         print(f"{it_per_epoch=}")
 
         param_str = f"_lr_{self.LEARNING_RATE}_lossfunc_{self.loss_func.__class__.__name__}_beta_{self.beta}"

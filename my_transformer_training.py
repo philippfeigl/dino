@@ -49,7 +49,7 @@ if __name__ == '__main__':
     init_parser = initial_parser(parser)
     
     given_test_cases = [1, 4, 7, 8, 9]
-    it_per_epoch = 10000
+    it_per_epoch = 15000
 
     output_features = [8]
     flattened_tensor = True
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     without_scale = False
     pretrained=True
     use_depth = False
-    beta=1000
+    beta=1
     
     loss_func = nn.SmoothL1Loss(reduction='mean', beta=beta)
     parser = set_parser_args(parser=copy.deepcopy(init_parser), 
@@ -149,6 +149,7 @@ if __name__ == '__main__':
         if without_scale and len(output_features)==1:
             output_features = [6]
         args = get_args(parser)
+        print(f"{args=}")
         trans_trainer = IBVSTransformerTraining(args=args, use_loc_tok=use_loc_tok, 
                                                 use_cls_tok=use_cls_tok, flattened_tensor=flattened_tensor,
                                                 loss_func=loss_func, beta=beta, use_depth=use_depth, output_features=output_features)

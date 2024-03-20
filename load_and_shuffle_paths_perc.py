@@ -218,8 +218,43 @@ class ImagePathLoader():
         test_vel_list = []
         test_vel_array = np.empty((0, self.length_train_vec))
         all_parameter_scenes_paths = self.get_dataset_paths()
+        print(f"{all_parameter_scenes_paths=}")
         for parameter_scenes_paths in all_parameter_scenes_paths:
-            num_all_traj = len(os.listdir(parameter_scenes_paths))
+            all_traj_scenes = os.listdir(parameter_scenes_paths)
+            num_all_traj = len(all_traj_scenes)
+            if test_stop and not random_samples:
+                traj_scenes = all_traj_scenes[:test_stop_id]
+                num_all_traj = len(traj_scenes)
+            elif not test_stop:
+                traj_scenes = all_traj_scenes
+            num_train_traj = int(num_all_traj * perc_train_traj / 100)
+            # num_trajectories = len(os.listdir(parameter_scenes_paths))
+            for i, curr_scene in enumerate(traj_scenes, 1):
+                if test_stop and i==test_stop_id+1:
+                    break
+                scene_path = os.path.join(parameter_scenes_paths, curr_scene)
+                if i <= num_train_traj:
+                    train_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
+                    train_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
+                    train_vel_array = np.vstack([train_vel_array, self.get_velocities_as_array(scene_path,
+                                                                                            from_np_file=True, 
+                                                                                            without_scaling_factors=without_scaling_factors)])
+                    # train_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
+                else:
+                    test_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
+                    test_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
+                    test_vel_array = np.vstack([test_vel_array, self.get_velocities_as_array(scene_path,
+                                                                                            from_np_file=True, 
+                                                                                            without_scaling_factors=without_scaling_factors)])
+                    # test_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
+                if (num_all_traj == num_train_traj) & (i % 10 == 0):
+                    test_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
+                    test_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
+                    test_vel_array = np.vstack([test_vel_array, self.get_velocities_as_array(scene_path,
+                                                                                            from_np_file=True,
+                                                                                            without_scaling_factors=without_scaling_factors)])
+                    # test_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
+            """
             if test_stop and not random_samples:
                 num_all_traj = test_stop_id
                 i_range = range(num_all_traj)
@@ -236,8 +271,7 @@ class ImagePathLoader():
                 if i <= num_train_traj:
                     train_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
                     train_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
-                    train_vel_array = np.vstack([train_vel_array, self.get_velocities_as_array(scene_path, 
-                                                                                            i, 
+                    train_vel_array = np.vstack([train_vel_array, self.get_velocities_as_array(scene_path,  
                                                                                             from_np_file=True, 
                                                                                             without_scaling_factors=without_scaling_factors)])
                     # train_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
@@ -245,7 +279,6 @@ class ImagePathLoader():
                     test_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
                     test_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
                     test_vel_array = np.vstack([test_vel_array, self.get_velocities_as_array(scene_path, 
-                                                                                            i, 
                                                                                             from_np_file=True, 
                                                                                             without_scaling_factors=without_scaling_factors)])
                     # test_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
@@ -253,10 +286,10 @@ class ImagePathLoader():
                     test_target_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.target_file_names)))
                     test_query_list.extend(self.read_list_from_pickle(os.path.join(scene_path, self.rgb_file_names)))
                     test_vel_array = np.vstack([test_vel_array, self.get_velocities_as_array(scene_path,
-                                                                                            i,
                                                                                             from_np_file=True,
                                                                                             without_scaling_factors=without_scaling_factors)])
                     # test_vel_list.extend(self.get_velocities_as_list(scene_path, i, from_np_file=True))
+            """
             if one_direction:
                 break
         train_storer = PathVelocityClass(train_target_list, train_query_list, train_vel_array)
@@ -271,9 +304,10 @@ class ImagePathLoader():
         velocity_array = np.empty((0,self.length_stored_vec))
         if 'blender' in self.dset_path:
             file_path = os.path.join(poses_path, 'poses_groundtruth_time.npy')
+            print(f"{poses_path=}")
             poses_array = np.load(file_path)
             target_pose = poses_array[0].reshape((4, 4))
-            for current_line in poses_array:
+            for current_line in poses_array[1:]:
                 current_pose = current_line.reshape((4, 4))
                 velocity_and_scale = self.calculate_pose_error_mat(current_pose, target_pose)
                 velocity_array = np.vstack([velocity_array, velocity_and_scale])
@@ -300,7 +334,7 @@ class ImagePathLoader():
             # np.savetxt(velocity_txt_path, velocity_array)
         return velocity_array
 
-    def get_velocities_as_array(self, path, idx, from_np_file=False, without_scaling_factors = True):
+    def get_velocities_as_array(self, path, from_np_file=False, without_scaling_factors = True):
         if from_np_file:
             velocity_path = os.path.join(path,'velocities_and_scale.npy')
             loaded_velocity_array = np.load(velocity_path)
@@ -317,7 +351,7 @@ class ImagePathLoader():
         else:
             velocity_array = self.get_velocity(path, idx)
         velocity_list = velocity_array.tolist()
-        print(f"{idx=}_{velocity_list=}")
+        print(f"{idx=}_{velocity_list=}\n")
         return velocity_list
 
     def calculate_pose_error(self, current_pose, target_pose):
@@ -376,11 +410,10 @@ class ImagePathLoader():
             ori_scale = 1
         # pose_error_array = np.hstack((pos_error, rot_error_quat, scale))
         pose_error_array = np.hstack([pos_error, trans_scale, rot_error_euler, ori_scale])
-
         return pose_error_array
 
 if __name__ == '__main__':
-    image_shuffeler= ImagePathLoader(True, corrupted_check=False)
+    image_shuffeler= ImagePathLoader(from_harddive=True, corrupted_check=False)
     # image_shuffeler.shuffle_paths()
     # image_shuffeler.calc_and_store_velocities()
     image_shuffeler.store_or_load_paths(test_stop=False)
