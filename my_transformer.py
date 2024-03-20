@@ -744,6 +744,8 @@ class IBVSTransformerTraining():
             transforms.ToTensor(),
             # transforms.Normalize(mean, std),
         ])
+        print(f"{train_storer.vel_vec.shape=}")
+        print(f"{len(train_storer.query_list)=}")
         if test:
             train_dataset = IBVSDataset(train_storer_test_query_list, train_storer_test_target_list, train_storer_test_vel_vec,
                                         self.device, img_transform=transform_train, vel_transform=transforms.ToTensor(), normalize=normalize_imgs,

@@ -192,9 +192,10 @@ class ImagePathLoader():
                 target_list.append(os.path.join(scene_path, 'target.png'))
                 self.write_list_to_pickle(stored_rgb_paths, query_list)
                 self.write_list_to_pickle(stored_target_paths, target_list)
+                velocity_array = self.get_velocity(scene_path, i, reversed=reversed, save_array=True, corrupt_list=corrupt_list)
+                print(f"{len(query_list)=}_{len(target_list)=}_{velocity_array.shape=}")
                 del query_list
                 del target_list
-                self.get_velocity(scene_path, i, reversed=reversed, save_array=True, corrupt_list=corrupt_list)
             if one_direction:
                 break
 
@@ -326,8 +327,8 @@ class ImagePathLoader():
                         velocity_and_scale = self.calculate_pose_error_mat(current_pose, target_pose)
                         velocity_array = np.vstack([velocity_array, velocity_and_scale])
             # velocity_and_scale = self.calculate_pose_error(target_pose, target_pose)
-            velocity_and_scale = self.calculate_pose_error_mat(target_pose, target_pose)
-            velocity_array = np.vstack([velocity_array, velocity_and_scale])
+        velocity_and_scale = self.calculate_pose_error_mat(target_pose, target_pose)
+        velocity_array = np.vstack([velocity_array, velocity_and_scale])
         if save_array:
             velocity_path = os.path.join(poses_path,'velocities_and_scale.npy')
             np.save(velocity_path, velocity_array)
