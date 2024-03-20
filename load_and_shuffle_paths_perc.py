@@ -24,8 +24,10 @@ class PathVelocityClass():
         self.vel_vec = vel_vec
 
 class ImagePathLoader():
-    def __init__(self, from_harddive, without_scaling_factors = False, blender_path=True, corrupted_check=False):
+    def __init__(self, from_harddive, media_path='/media/philipp', without_scaling_factors = False, blender_path=True, corrupted_check=False):
         self.from_harddive = from_harddive
+        if self.from_harddive:
+            self.harddrive_path = [os.path.join(media_path, entry) for entry in os.listdir(media_path)][0]
         self.length_stored_vec = 8
         self.length_train_vec = 8
         if without_scaling_factors:
@@ -123,7 +125,7 @@ class ImagePathLoader():
             return True
 
     def get_camera_groundtruth(self):
-        parent_path = Path(os.path.dirname(os.path.abspath(__file__))).parent.absolute()
+        parent_path = self.harddrive_path
         groundtruth_path = os.path.join(parent_path, "visual_servoing/groundtruth")
         return groundtruth_path
 
@@ -175,9 +177,12 @@ class ImagePathLoader():
                 target_list = []
                 
                 rgb_path = os.path.join(scene_path, 'rgb')
-                for path in os.listdir(rgb_path):
-                    rgb_file_path = os.path.join(rgb_path, path)
-                    if self.corrupted_check and self.is_image_corrupted(rgb_file_path):
+                rgb_imgs_list = os.listdir(rgb_path)
+                sort_list_ret = rgb_imgs_list.sort()
+                for path in rgb_imgs_list:
+                    full_rgb_file_path = os.path.join(rgb_path, path)
+                    rgb_file_path = full_rgb_file_path.replace(self.harddrive_path+'/', '')
+                    if self.corrupted_check and self.is_image_corrupted(full_rgb_file_path):
                         corrupt_list = np.vstack([corrupt_list, int(path.split('.')[0])])
                     else:
                         query_list.append(rgb_file_path)
@@ -196,11 +201,9 @@ class ImagePathLoader():
         if self.from_harddive:
             if self.data_path is not None:
                 return parameter_scenes_paths
-            media_path = '/media/philipp'
-            harddrive_path = [os.path.join(media_path, entry) for entry in os.listdir(media_path)][0]
+            harddrive_path = self.harddrive_path
             servoing_path = os.path.join(harddrive_path, 'visual_servoing')
-            local_servoing_path = os.path.join(os.getcwd(), 'src/visual_servoing')
-            self.groundtruth_path = os.path.join(local_servoing_path, 'groundtruth')
+            self.groundtruth_path = os.path.join(servoing_path, 'groundtruth')
             scenes_path = os.path.join(servoing_path, 'scenes')
             geometry_path = os.path.join(scenes_path, self.dset_path)
             parameter_scenes_paths = [os.path.join(geometry_path, entry) for entry in os.listdir(geometry_path)]

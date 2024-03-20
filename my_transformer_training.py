@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a neural network')
     init_parser = initial_parser(parser)
     
-    given_test_cases = [1, 4, 7, 8, 9]
+    given_test_cases = [2,3,5,6]
     it_per_epoch = 15000
 
     output_features = [8]
