@@ -20,6 +20,7 @@ from functools import partial
 import torch
 import torch.nn as nn
 import os
+import vit_utils
 from vit_utils import trunc_normal_
 import torch.optim
 # from .load_and_shuffle_paths import ImagePathLoader
@@ -654,6 +655,78 @@ def vel_mlp(in_features, hidden_features, out_features, act_layer=nn.ReLU, drop=
                             act_layer=act_layer)
     return model
 
+class DataAugmentationDINO(object):
+    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
+        color_jitter = transforms.Compose([
+            transforms.RandomApply(
+                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                p=0.8
+            ),
+            transforms.RandomGrayscale(p=0.2),
+        ])
+        normalize = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])        # first global crop
+        self.global_transfo1 = transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
+            color_jitter,
+            utils.GaussianBlur(1.0),
+            normalize,
+        ])
+        # second global crop
+        self.global_transfo2 = transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
+            color_jitter,
+            utils.GaussianBlur(0.1),
+            utils.Solarization(0.2),
+            normalize,
+        ])
+        # transformation for the local small crops
+        self.local_crops_number = local_crops_number
+        self.local_transfo = transforms.Compose([
+            transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=Image.BICUBIC),
+            color_jitter,
+            utils.GaussianBlur(p=0.5),
+            normalize,
+        ])
+
+    def __call__(self, image):
+        crops = []
+        crops.append(self.global_transfo1(image))
+        crops.append(self.global_transfo2(image))
+        for _ in range(self.local_crops_number):
+            crops.append(self.local_transfo(image))
+        return crops
+
+class MyDataAugmentation(object):
+    def __init__(self):
+        color_jitter = transforms.Compose([
+            transforms.RandomApply(
+                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                p=0.8
+            ),
+            transforms.RandomGrayscale(p=0.2),
+        ])
+        normalize = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+        ])
+
+        # first global crop
+        self.global_transfo = transforms.Compose([
+            transforms.Resize((224, 224)),
+            color_jitter,
+            vit_utils.GaussianBlur(0.5),
+            normalize,
+        ])
+
+    def __call__(self, image):
+        crops = []
+        crops.append(self.global_transfo(image))
+        return crops
+
+
 class IBVSTransformer(nn.Module):
     """ Vision Transformer """
     def __init__(self,args, in_chans=3, use_loc_tok=True, use_cls_tok=True, output_features=[6], act_layer=nn.ReLU()):
@@ -839,19 +912,34 @@ class IBVSTransformerTraining():
 
         print(f"shuffeler_finished")
         transform = transforms.ToTensor()
-
+        """
         transform_train = transforms.Compose([
             transforms.Resize((224, 224)),
             # transforms.RandomHorizontalFlip(),
             # transforms.RandomRotation(10),
             transforms.ToTensor(),
             # transforms.Normalize(mean, std),
-        ])
+        ])"""
+
+         # ============ preparing data ... ============
         transform = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
             # transforms.Normalize(mean, std),
         ])
+
+        if args.data_aug and args.data_aug_ind==1:
+            transform_train = MyDataAugmentation(
+            )
+        elif args.data_aug and args.data_aug_ind==2:
+            transform_train = DataAugmentationDINO(
+                args.global_crops_scale,
+                args.local_crops_scale,
+                args.local_crops_number,
+            )
+        else:
+            transform_train = transform
+
         print(f"{train_storer.vel_vec.shape=}")
         print(f"{len(train_storer.query_list)=}")
         if test:
@@ -910,6 +998,8 @@ class IBVSTransformerTraining():
             param_str += f'_seed{args.seed}'
         if args.blender_data:
             param_str += '_blend'
+        if args.data_aug:
+            param_str += '_daug' + str(args.data_aug_ind)
 
         train_string = ""
         test_string = ""

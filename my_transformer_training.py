@@ -29,6 +29,19 @@ def initial_parser(parser):
     parser.add_argument('--store_on_drive', type=bool, default=True, help='If True, store model and loss on HDD or SSD')
     parser.add_argument('--random_sample', type=bool, default=False, help='If True, use random samples')
     parser.add_argument('--blender_data', type=bool, default=True, help='If True, use blender dataset')
+    parser.add_argument('--data_aug', type=bool, default=True, help='If True, use data augmentation')
+    parser.add_argument('--data_aug_ind', type=int, default=1, help='1 Reduced augmentation, 2 DINO Crop Setting')
+    # Multi-crop parameters
+    parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
+        help="""Scale range of the cropped image before resizing, relatively to the origin image.
+        Used for large global view cropping. When disabling multi-crop (--local_crops_number 0), we
+        recommand using a wider range of scale ("--global_crops_scale 0.14 1." for example)""")
+    parser.add_argument('--local_crops_number', type=int, default=8, help="""Number of small
+        local views to generate. Set this parameter to 0 to disable multi-crop training.
+        When disabling multi-crop we recommend to use "--global_crops_scale 0.14 1." """)
+    parser.add_argument('--local_crops_scale', type=float, nargs='+', default=(0.05, 0.4),
+        help="""Scale range of the cropped image before resizing, relatively to the origin image.
+        Used for small local view cropping of multi-crop.""")
 
     # GPU-Optionen
     parser.add_argument('--cuda', action='store_true', help='Verwenden Sie CUDA (GPU), wenn verfügbar')
@@ -48,7 +61,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a neural network')
     init_parser = initial_parser(parser)
     
-    given_test_cases = [1,2,3,4,5]
+    given_test_cases = [1,2]
     it_per_epoch = 15000
 
     output_features = [8]
@@ -82,7 +95,7 @@ if __name__ == '__main__':
             output_features = [3,1,3,1]
             use_loc_tok = True
             use_cls_tok = True
-            loss_func = nn.SmoothL1Loss(reduction='mean', beta=1)
+            args.loss_func = nn.Tanh()
             args.layer_norm = False
         if test_case == 3:
             output_features = [3,1,3,1]
