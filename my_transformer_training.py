@@ -14,7 +14,7 @@ def initial_parser(parser):
     parser.add_argument('--batch_size', type=int, default=8, help='Batch-Size')
     parser.add_argument('--learning_rate', type=float, default=2e-5, help='Learning rate')
     parser.add_argument('--flattened_tensor', type=bool, default=True, help='Use if using only 1 MLP on flattened image tensor')
-    parser.add_argument('--use_given_its', type=bool, default=True, help='If true, stop iterations after it_per_epoch')
+    parser.add_argument('--use_given_its', type=bool, default=False, help='If true, stop iterations after it_per_epoch')
     parser.add_argument('--perc_train_traj', type=int, default=90, help='Percantage of trajectories to train on')
     parser.add_argument('--perc_vel_traj', type=int, default=10, help='Percantage of trajectories for validation')
     parser.add_argument('--pretrained', type=bool, default=True, help='Choose if pretrained model')
