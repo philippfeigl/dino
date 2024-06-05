@@ -453,6 +453,33 @@ class Mlp_all(nn.Module):
         x_norm = self.id_act(x_norm)
         return x_norm
 
+class Mlp_all_wn(nn.Module):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.2): # Added drop
+        super().__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = act_layer
+        self.fc2 = nn.Linear(hidden_features, hidden_features)
+        self.fc3 = nn.Linear(hidden_features, out_features[0])
+        self.drop = nn.Dropout(drop)
+        self.t_norm = NormalizationLayer(start_idx=0, end_idx=3)
+        start_idx = int(sum(out_features)/2)
+        end_idx = start_idx + 3
+        # self.r_norm = Norm(start_idx=start_idx, end_idx=end_idx)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc3(x)
+        x_shape = x.clone().view(x.shape[0], x.shape[2])
+        return x_shape
+
 class Mlp_tr(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.2): # Added drop
         super().__init__()
@@ -484,6 +511,33 @@ class Mlp_tr(nn.Module):
         concat_list = [t_norm, r_norm]
         y = torch.cat(concat_list, dim=-1)
         y = self.id_act(y)
+        return y
+
+class Mlp_tr_wn(nn.Module):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.2): # Added drop
+        super().__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = act_layer
+        self.fc2 = nn.Linear(hidden_features, hidden_features)
+        self.fc3t = nn.Linear(hidden_features, out_features[0])
+        self.fc3r = nn.Linear(hidden_features, out_features[1])
+        self.drop = nn.Dropout(drop)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.act(x)
+        x = self.drop(x)
+        t = self.fc3t(x)
+        r = self.fc3r(x)
+        concat_list = [t, r]
+        y = torch.cat(concat_list, dim=-1)
+        y_shape = y.clone().view(y.shape[0], y.shape[2])
         return y
 
 class Mlp_tsrs(nn.Module):
@@ -529,27 +583,80 @@ class Mlp_tsrs(nn.Module):
         y = self.id_act(y)
         return y
 
-def vel_mlp(in_features, hidden_features, out_features, act_layer=nn.ReLU, drop=0.0):
+class Mlp_tsrs_wn(nn.Module):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.2): # Added drop
+        super().__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = act_layer
+        self.fc2 = nn.Linear(hidden_features, hidden_features)
+        self.fc3t = nn.Linear(hidden_features, out_features[0])
+        self.fc3ts = nn.Linear(hidden_features, out_features[1])
+        self.fc3r = nn.Linear(hidden_features, out_features[2])
+        self.fc3rs = nn.Linear(hidden_features, out_features[3])
+        self.drop = nn.Dropout(drop)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.act(x)
+        x = self.drop(x)
+        t = self.fc3t(x)
+        s_t = self.fc3ts(x)
+        t_concat_list = [t, s_t]
+        y_t = torch.cat(t_concat_list, dim=-1)
+        r = self.fc3r(x)
+        s_r = self.fc3rs(x)
+        r_concat_list = [r, s_r]
+        y_r = torch.cat(r_concat_list, dim=-1)
+        concat_list = [y_t, y_r]
+        y = torch.cat(concat_list, dim=-1)
+        y_shape = y.clone().view(y.shape[0], y.shape[2])
+        return y_shape
+
+def vel_mlp(in_features, hidden_features, out_features, act_layer=nn.ReLU, drop=0.0, normalize=False):
     if len(out_features)==1:
-        model = Mlp_all(in_features=in_features,
+        if normalize:
+            model = Mlp_all(in_features=in_features,
+                            hidden_features=hidden_features,
+                            out_features=out_features,
+                            act_layer=act_layer)
+        else:
+            model = Mlp_all_wn(in_features=in_features,
+                               hidden_features=hidden_features,
+                               out_features=out_features,
+                               act_layer=act_layer)
+    elif len(out_features)==2:
+        if normalize:
+            model = Mlp_tr(in_features=in_features,
+                           hidden_features=hidden_features,
+                           out_features=out_features,
+                           act_layer=act_layer)
+        else:
+            model = Mlp_tr_wn(in_features=in_features,
                         hidden_features=hidden_features,
                         out_features=out_features,
                         act_layer=act_layer)
-    elif len(out_features)==2:
-        model = Mlp_tr(in_features=in_features,
-                       hidden_features=hidden_features,
-                       out_features=out_features,
-                       act_layer=act_layer)
     elif len(out_features)==4:
-        model = Mlp_tsrs(in_features=in_features,
-                         hidden_features=hidden_features,
-                         out_features=out_features,
-                         act_layer=act_layer)
+        if normalize:
+            model = Mlp_tsrs(in_features=in_features,
+                            hidden_features=hidden_features,
+                            out_features=out_features,
+                            act_layer=act_layer)
+        else:
+            model = Mlp_tsrs_wn(in_features=in_features,
+                            hidden_features=hidden_features,
+                            out_features=out_features,
+                            act_layer=act_layer)
     return model
 
 class IBVSTransformer(nn.Module):
     """ Vision Transformer """
-    def __init__(self,args, in_chans=3, use_loc_tok=True, use_cls_tok=True, output_features=[6], act_layer=nn.Tanh()):
+    def __init__(self,args, in_chans=3, use_loc_tok=True, use_cls_tok=True, output_features=[6], act_layer=nn.ReLU()):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.vit = vit_small(pretrained=args.pretrained, in_chans=in_chans, use_clt=use_cls_tok, use_loc=use_loc_tok).to(self.device)
@@ -561,10 +668,11 @@ class IBVSTransformer(nn.Module):
             token_size += 1
         in_features = token_size * 2 * self.emb_dim
         self.mlp = vel_mlp(in_features=in_features,
-                          hidden_features=4*self.emb_dim,
-                          out_features=output_features,
-                          act_layer=act_layer,
-                          drop=args.drop_out).to(self.device)
+                           hidden_features=4*self.emb_dim,
+                           out_features=output_features,
+                           act_layer=act_layer,
+                           drop=args.drop_out,
+                           normalize=args.layer_norm).to(self.device)
         self.post_mlp = None
         # self.t_norm = Norm(start_idx=0, end_idx=3)
         self.t_norm = NormalizationLayer(start_idx=0, end_idx=3).to(self.device)
@@ -845,6 +953,7 @@ class IBVSTransformerTraining():
                                             output_features=self.output_features,
                                             flattened_tensor=self.flattened_tensor)
                     v_target_normalized = self.normalize_velocity_tensor(vel_vec).to(torch.float32)
+                    # print(f"{v_normalized.shape=}\n{v_target_normalized.shape=}")
                     t_err, t_s_err, r_err, r_s_err = self.get_errors(current_vel=v_normalized, target_vel=v_target_normalized)
                     t_error_batches.append(t_err)
                     t_scale_error_batches.append(t_s_err)
